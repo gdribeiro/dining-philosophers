@@ -122,7 +122,7 @@ void philosophize(void* ptr) {
         // increase it's own hunger level
         if ((hunger[left] > hunger[seat]) || (hunger[right] > hunger[seat])) {
           hunger[seat] = hunger[seat]++;
-          sem_post(&chopsticks[seat]);
+          sem_post(&chopsticks[(seat + 1) % NumPhilosophers]);
           break;
         }
         // Waits for the chopsticks on the left first
