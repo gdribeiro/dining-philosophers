@@ -20,6 +20,8 @@ sem_t stateMutex;
 pthread_t* philosophersThreads;
 // Keeps the seat number of each philosopher
 int* seats;
+// To implement fairness and limited wait
+int* hunger;
 
 // Funtion passed to threads
 // which will dispute for the resourses
@@ -58,17 +60,27 @@ int main(int argc, char** argv) {
 
 void philosophize(void* ptr) {
   int evenodd;
+  int left, right;
   // Stores the set of each philosopher
   int seat = *(int*)ptr;
   printf("Seat teken: %d \n", seat);
-  if (seat == 0)
+  if (seat == 0) {
     evenodd = 1;
-  else if (seat % 2)
+    left = NumPhilosophers;
+    right = 1;
+  } else if (seat % 2) {
     evenodd = 0;
-  else
+    left = (seat - 1) % NumPhilosophers;
+    right = (seat + 1) % NumPhilosophers;
+  } else {
     evenodd = 1;
+    left = (seat - 1) % NumPhilosophers;
+    right = (seat + 1) % NumPhilosophers;
+  }
 
   while (true) {
+    printf("seat:%d hunger:%d\n", seat, hunger[seat]);
+
     // Waits for the chopsticks
     // Contains the states Hungry and Eating
     switch (evenodd) {
@@ -79,13 +91,22 @@ void philosophize(void* ptr) {
         printPhilosophersState('H', seat);
         // Waits for the chopsticks on the left first
         sem_wait(&chopsticks[seat]);
+        // If it's neighbors are hungrier it releases the chopsticks and
+        // increase it's own hunger level
+        if ((hunger[left] > hunger[seat]) || (hunger[right] > hunger[seat])) {
+          hunger[seat] = hunger[seat]++;
+          sem_post(&chopsticks[seat]);
+          break;
+        }
         // Waits for the chopstick on the right
         sem_wait(&chopsticks[(seat + 1) % NumPhilosophers]);
+        // After get both chopsticks reset hunger
+        hunger[seat] = 0;
         // Changes the state to E-eating
         // Print philosophers' state
         printPhilosophersState('E', seat);
         // Eats for a ramdom time up to 10s
-        sleep(rand() % 10);
+        sleep(rand() % 2);
         // Free the chopsticks after eat
         sem_post(&chopsticks[seat]);
         sem_post(&chopsticks[(seat + 1) % NumPhilosophers]);
@@ -97,13 +118,22 @@ void philosophize(void* ptr) {
         printPhilosophersState('H', seat);
         // Waits for the chopstick on the right
         sem_wait(&chopsticks[(seat + 1) % NumPhilosophers]);
+        // If it's neighbors are hungrier it releases the chopsticks and
+        // increase it's own hunger level
+        if ((hunger[left] > hunger[seat]) || (hunger[right] > hunger[seat])) {
+          hunger[seat] = hunger[seat]++;
+          sem_post(&chopsticks[seat]);
+          break;
+        }
         // Waits for the chopsticks on the left first
         sem_wait(&chopsticks[seat]);
+        // After get both chopsticks reset hunger
+        hunger[seat] = 0;
         // Changes the state to E-eating
         // Print the philosophers' state
         printPhilosophersState('E', seat);
         // Eats for a ramdom time up to 10s
-        sleep(rand() % 10);
+        sleep(rand() % 2);
         // Free the chopsticks after eat
         sem_post(&chopsticks[(seat + 1) % NumPhilosophers]);
         sem_post(&chopsticks[seat]);
@@ -112,7 +142,7 @@ void philosophize(void* ptr) {
     // Changes the state to Thinking
     printPhilosophersState('T', seat);
     // sleep for a ramdom time up to 10s
-    sleep(rand() % 10);
+    sleep(rand() % 2);
   }
 }
 
@@ -129,6 +159,7 @@ void initPhilosophers() {
   int i;
   // Allocate memmory for the seat numbers
   seats = (int*)malloc(NumPhilosophers * sizeof(int));
+  hunger = (int*)malloc(NumPhilosophers * sizeof(int));
   if (seats == NULL) printf("Error while allocating memory to seat numbers!\n");
   // Allocate memmory for the thread's descriptors
   philosophersThreads = (pthread_t*)malloc(NumPhilosophers * sizeof(pthread_t));
@@ -136,6 +167,7 @@ void initPhilosophers() {
     printf("Error while allocating memory to the Threads!\n");
   for (i = 0; i < NumPhilosophers; i++) {
     seats[i] = i;
+    hunger[i] = 0;
     int err = pthread_create(&philosophersThreads[i], NULL,
                              (void*)&philosophize, (void*)&seats[i]);
     if (err != 0) {
